@@ -46,6 +46,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, 4, 5, U8X8_PIN_NONE);
 U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 4, 5);
 #else       // display via i2c for D1MINI board
 U8G2_SSD1306_64X48_ER_F_HW_I2C u8g2(U8G2_R0,U8X8_PIN_NONE,U8X8_PIN_NONE,U8X8_PIN_NONE);
+#define GPIO_LED_GREEN 22 // Led on TTGO d1Mini v2 board (black) 
 #endif
 
 // HPMA115S0 sensor config
@@ -187,6 +188,16 @@ void sensorLoop(){
   else wrongDataState();
 }
 
+void gotToSuspend (){
+  Serial.println("-->[ESP] suspending..");
+  pServer->getAdvertising()->stop();
+  disableSensor();
+  delay(8); // waiting for writing msg on serial
+  //esp_deep_sleep(1000000LL * DEEP_SLEEP_DURATION);
+  esp_sleep_enable_timer_wakeup(1000000LL * DEEP_SLEEP_DURATION);
+  esp_deep_sleep_start();
+}
+
 void statusLoop(){
   if (v25.size() == 0) {
     Serial.print("-->[STATUS] ");
@@ -199,6 +210,7 @@ void statusLoop(){
   if(triggerSaveIcon++<3)gui.displayPrefSaveIcon(true);
   else gui.displayPrefSaveIcon(false);
   if(dataSendToggle)dataSendToggle=false;
+
 }
 
 String getNotificationData(){
@@ -255,9 +267,6 @@ void humidityLoop() {
 void batteryloop() {
 #ifdef TTGO_TQ
   Rdelay = 0;
-  //digitalWrite(LED, HIGH);
-  //delayMicroseconds(50);
-  //digitalWrite(LED, LOW);
   while (digitalRead(IP5306_2) == HIGH)
   {
     delayMicroseconds(100); // Sincronization in 1
@@ -279,9 +288,6 @@ void batteryloop() {
     return;
   }
   delayMicroseconds(1600);
-  //digitalWrite(LED, HIGH);
-  //delayMicroseconds(50);
-  //digitalWrite(LED, LOW);
   if (digitalRead(IP5306_2) == HIGH)
   {
     delayMicroseconds(100);
@@ -650,6 +656,8 @@ void setup() {
   influxDbInit();
   apiInit();
   pinMode(LED,OUTPUT);
+  pinMode(GPIO_LED_GREEN, OUTPUT);
+  pinMode(GPIO_SENSOR_ENABLE, OUTPUT);
   gui.welcomeAddMessage("==SETUP READY==");
   delay(500);
 }
