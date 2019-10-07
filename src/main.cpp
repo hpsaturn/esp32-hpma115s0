@@ -47,6 +47,8 @@ U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 4, 5);
 #else       // display via i2c for D1MINI board
 U8G2_SSD1306_64X48_ER_F_HW_I2C u8g2(U8G2_R0,U8X8_PIN_NONE,U8X8_PIN_NONE,U8X8_PIN_NONE);
 #define GPIO_LED_GREEN 22 // Led on TTGO d1Mini v2 board (black) 
+#define GPIO_SENSOR_ENABLE 23 // TODO check it with 2N2222
+#define DEEP_SLEEP_DURATION 240 // sleep x seconds and then wake up
 #endif
 
 // HPMA115S0 sensor config
@@ -188,6 +190,10 @@ void sensorLoop(){
   else wrongDataState();
 }
 
+void disableSensor () {  // for show receive connections state
+  digitalWrite (GPIO_SENSOR_ENABLE, HIGH);
+}
+
 void gotToSuspend (){
   Serial.println("-->[ESP] suspending..");
   pServer->getAdvertising()->stop();
@@ -207,6 +213,8 @@ void statusLoop(){
   }
   gui.updateError(getErrorCode());
   gui.displayStatus(wifiOn,true,deviceConnected,dataSendToggle);
+  if(dataSendToggle)digitalWrite(GPIO_LED_GREEN,HIGH);
+  else digitalWrite(GPIO_LED_GREEN,HIGH);
   if(triggerSaveIcon++<3)gui.displayPrefSaveIcon(true);
   else gui.displayPrefSaveIcon(false);
   if(dataSendToggle)dataSendToggle=false;
