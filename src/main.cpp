@@ -48,8 +48,10 @@ U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 4, 5);
 U8G2_SSD1306_64X48_ER_F_HW_I2C u8g2(U8G2_R0,U8X8_PIN_NONE,U8X8_PIN_NONE,U8X8_PIN_NONE);
 #define GPIO_LED_GREEN 22 // Led on TTGO d1Mini v2 board (black) 
 #define GPIO_SENSOR_ENABLE 23 // TODO check it with 2N2222
-#define DEEP_SLEEP_DURATION 240 // sleep x seconds and then wake up
+#define DEEP_SLEEP_DURATION 15 // sleep x seconds and then wake up
 #endif
+
+int measureCount = 0;
 
 // HPMA115S0 sensor config
 #ifdef WEMOSOLED
@@ -190,8 +192,12 @@ void sensorLoop(){
   else wrongDataState();
 }
 
-void disableSensor () {  // for show receive connections state
+void enableSensor () { 
   digitalWrite (GPIO_SENSOR_ENABLE, HIGH);
+}
+
+void disableSensor () {
+  digitalWrite (GPIO_SENSOR_ENABLE, LOW);
 }
 
 void gotToSuspend (){
@@ -218,7 +224,11 @@ void statusLoop(){
   if(triggerSaveIcon++<3)gui.displayPrefSaveIcon(true);
   else gui.displayPrefSaveIcon(false);
   if(dataSendToggle)dataSendToggle=false;
-
+  if(measureCount++>=10){
+    measureCount=0;
+    disableSensor();
+    gotToSuspend();
+  }
 }
 
 String getNotificationData(){
@@ -357,23 +367,32 @@ void apiInit(){
 
 void apiLoop() {
   if (v25.size() == 0 && wifiOn && cfg.isApiEnable() && apiIsConfigured()) {
-    Serial.print("-->[API] writing to ");
-    Serial.print(""+String(api.ip)+"..");
-    bool status = api.write(0,apm25,apm10,humi,temp,cfg.lat,cfg.lon,cfg.alt,cfg.spd,cfg.stime);
-    int code = api.getResponse();
-    if(status) {
-      Serial.println("done. ["+String(code)+"]");
-      statusOn(bit_cloud);
-      dataSendToggle = true;
-    }
-    else {
-      Serial.println("fail! ["+String(code)+"]");
-      statusOff(bit_cloud);
-      setErrorCode(ecode_api_write_fail);
-      if (code == -1) {
-        Serial.println("-->[E][API] publish error (-1)");
-        delay(1000);
+    if(measureCount>=1){
+      Serial.print("-->[API] writing to ");
+      Serial.print("" + String(api.ip) + "..");
+      bool status = api.write(0, apm25, apm10, humi, temp, cfg.lat, cfg.lon, cfg.alt, cfg.spd, cfg.stime);
+      int code = api.getResponse();
+      if (status){
+        Serial.println("done. [" + String(code) + "]");
+        statusOn(bit_cloud);
+        dataSendToggle = true;
       }
+      else
+      {
+        Serial.println("fail! [" + String(code) + "]");
+        statusOff(bit_cloud);
+        setErrorCode(ecode_api_write_fail);
+        if (code == -1)
+        {
+          Serial.println("-->[E][API] publish error (-1)");
+          delay(1000);
+        }
+      }
+    }
+    if(measureCount++>=3){
+      measureCount=0;
+      disableSensor();
+      gotToSuspend();
     }
   }
 }
@@ -666,6 +685,7 @@ void setup() {
   pinMode(LED,OUTPUT);
   pinMode(GPIO_LED_GREEN, OUTPUT);
   pinMode(GPIO_SENSOR_ENABLE, OUTPUT);
+  enableSensor();
   gui.welcomeAddMessage("==SETUP READY==");
   delay(500);
 }
