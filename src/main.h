@@ -51,7 +51,7 @@ ConfigApp cfg;
 int triggerSaveIcon = 0;
 
 // GUI fields
-#define LED 2
+//#define LED 2
 GUIUtils gui;
 
 // some prototypes

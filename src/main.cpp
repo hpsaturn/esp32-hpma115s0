@@ -48,7 +48,7 @@ U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 4, 5);
 U8G2_SSD1306_64X48_ER_F_HW_I2C u8g2(U8G2_R0,U8X8_PIN_NONE,U8X8_PIN_NONE,U8X8_PIN_NONE);
 #define GPIO_LED_GREEN 22 // Led on TTGO d1Mini v2 board (black) 
 #define GPIO_SENSOR_ENABLE 23 // TODO check it with 2N2222
-#define DEEP_SLEEP_DURATION 15 // sleep x seconds and then wake up
+#define DEEP_SLEEP_DURATION 240 // sleep x seconds and then wake up
 #endif
 
 int measureCount = 0;
@@ -220,15 +220,10 @@ void statusLoop(){
   gui.updateError(getErrorCode());
   gui.displayStatus(wifiOn,true,deviceConnected,dataSendToggle);
   if(dataSendToggle)digitalWrite(GPIO_LED_GREEN,HIGH);
-  else digitalWrite(GPIO_LED_GREEN,HIGH);
+  else digitalWrite(GPIO_LED_GREEN,LOW);
   if(triggerSaveIcon++<3)gui.displayPrefSaveIcon(true);
   else gui.displayPrefSaveIcon(false);
   if(dataSendToggle)dataSendToggle=false;
-  if(measureCount++>=10){
-    measureCount=0;
-    disableSensor();
-    gotToSuspend();
-  }
 }
 
 String getNotificationData(){
@@ -265,12 +260,12 @@ void getHumidityRead() {
 
 void humidityLoop() {
   #ifdef ESP32Sboard
-    digitalWrite (LED,LOW);
+    // digitalWrite (LED,LOW);
   #endif
   if (v25.size() == 0) {
     getHumidityRead();
   #ifdef ESP32Sboard
-    digitalWrite (LED,HIGH);
+    // digitalWrite (LED,HIGH);
   #endif
   }
 }
@@ -389,9 +384,8 @@ void apiLoop() {
         }
       }
     }
-    if(measureCount++>=3){
+    if(measureCount++>=2){
       measureCount=0;
-      disableSensor();
       gotToSuspend();
     }
   }
@@ -682,8 +676,8 @@ void setup() {
   gui.welcomeAddMessage("CanAirIO API..");
   influxDbInit();
   apiInit();
-  pinMode(LED,OUTPUT);
-  pinMode(GPIO_LED_GREEN, OUTPUT);
+  pinMode(GPIO_LED_GREEN,OUTPUT);
+  digitalWrite(GPIO_LED_GREEN,LOW);
   pinMode(GPIO_SENSOR_ENABLE, OUTPUT);
   enableSensor();
   gui.welcomeAddMessage("==SETUP READY==");
