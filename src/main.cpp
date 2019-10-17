@@ -192,24 +192,6 @@ void sensorLoop(){
   else wrongDataState();
 }
 
-void enableSensor () { 
-  digitalWrite (GPIO_SENSOR_ENABLE, HIGH);
-}
-
-void disableSensor () {
-  digitalWrite (GPIO_SENSOR_ENABLE, LOW);
-}
-
-void gotToSuspend (){
-  Serial.println("-->[ESP] suspending..");
-  pServer->getAdvertising()->stop();
-  disableSensor();
-  delay(8); // waiting for writing msg on serial
-  //esp_deep_sleep(1000000LL * DEEP_SLEEP_DURATION);
-  esp_sleep_enable_timer_wakeup(1000000LL * DEEP_SLEEP_DURATION);
-  esp_deep_sleep_start();
-}
-
 void statusLoop(){
   if (v25.size() == 0) {
     Serial.print("-->[STATUS] ");
@@ -362,31 +344,25 @@ void apiInit(){
 
 void apiLoop() {
   if (v25.size() == 0 && wifiOn && cfg.isApiEnable() && apiIsConfigured()) {
-    if(measureCount>=1){
-      Serial.print("-->[API] writing to ");
-      Serial.print("" + String(api.ip) + "..");
-      bool status = api.write(0, apm25, apm10, humi, temp, cfg.lat, cfg.lon, cfg.alt, cfg.spd, cfg.stime);
-      int code = api.getResponse();
-      if (status){
-        Serial.println("done. [" + String(code) + "]");
-        statusOn(bit_cloud);
-        dataSendToggle = true;
-      }
-      else
-      {
-        Serial.println("fail! [" + String(code) + "]");
-        statusOff(bit_cloud);
-        setErrorCode(ecode_api_write_fail);
-        if (code == -1)
-        {
-          Serial.println("-->[E][API] publish error (-1)");
-          delay(1000);
-        }
-      }
+    Serial.print("-->[API] writing to ");
+    Serial.print("" + String(api.ip) + "..");
+    bool status = api.write(0, apm25, apm10, humi, temp, cfg.lat, cfg.lon, cfg.alt, cfg.spd, cfg.stime);
+    int code = api.getResponse();
+    if (status) {
+      Serial.println("done. [" + String(code) + "]");
+      statusOn(bit_cloud);
+      dataSendToggle = true;
     }
-    if(measureCount++>=2){
-      measureCount=0;
-      gotToSuspend();
+    else
+    {
+      Serial.println("fail! [" + String(code) + "]");
+      statusOff(bit_cloud);
+      setErrorCode(ecode_api_write_fail);
+      if (code == -1)
+      {
+        Serial.println("-->[E][API] publish error (-1)");
+        delay(1000);
+      }
     }
   }
 }
@@ -651,6 +627,41 @@ void bleLoop(){
 }
 
 /******************************************************************************
+*  H I B E R N A T E
+******************************************************************************/
+
+void enableSensor () { 
+  digitalWrite (GPIO_SENSOR_ENABLE, HIGH);
+}
+
+void disableSensor () {
+  digitalWrite (GPIO_SENSOR_ENABLE, LOW);
+}
+
+void gotToSuspend (){
+  Serial.println("-->[ESP] suspending..");
+  pServer->getAdvertising()->stop();
+  disableSensor();
+  delay(8); // waiting for writing msg on serial
+  esp_sleep_enable_timer_wakeup(1000000LL * DEEP_SLEEP_DURATION);
+  esp_deep_sleep_start();
+}
+
+void suspendLoop() {
+  if (v25.size() == 0) {
+    if (measureCount >= 1) {
+      apiLoop();      // canairio publication
+      influxDbLoop(); // influxDB publication
+    }
+    if (measureCount >= 2) {
+      measureCount = 0;
+      gotToSuspend();
+    }
+    measureCount++;
+  }
+}
+
+/******************************************************************************
 *  M A I N
 ******************************************************************************/
 
@@ -692,10 +703,9 @@ void loop(){
   batteryloop();   // battery charge status 
   bleLoop();       // notify data to connected devices
   wifiLoop();      // check wifi and reconnect it
-  apiLoop();
-  influxDbLoop();  // influxDB publication
   statusLoop();    // update sensor status GUI
-  otaLoop();
+  otaLoop();       // check OTA updated
+  suspendLoop();   // check API publication and hibernate all
   gui.pageEnd();
   delay(500);
 }
