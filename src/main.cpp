@@ -703,9 +703,9 @@ void loop(){
   batteryloop();   // battery charge status 
   bleLoop();       // notify data to connected devices
   wifiLoop();      // check wifi and reconnect it
+  suspendLoop();   // check API publication and hibernate all
   statusLoop();    // update sensor status GUI
   otaLoop();       // check OTA updated
-  suspendLoop();   // check API publication and hibernate all
   gui.pageEnd();
   delay(500);
 }
