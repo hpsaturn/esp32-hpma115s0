@@ -35,10 +35,9 @@
 *.swp
 
 # travis
-#.travis.yml
+.travis.yml
 
 # PlatformIO work files
-.pio
 .pioenvs
 .piolibdeps
 *tags*
@@ -46,13 +45,8 @@
 # Project
 secrets.load
 secrets.load.*
-*.bin
-*.zip
-wiki
-web
-espota.py
-esptool.py
-md5output.txt
+install/*
+releases/*
 
 # IDE
 .travis.yml
