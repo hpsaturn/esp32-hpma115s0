@@ -106,9 +106,9 @@ void wrongDataState(){
   setErrorCode(ecode_sensor_read_fail);
   gui.displaySensorAvarage(apm25);
   #ifdef TTGO_TQ
-  gui.displaySensorData(0,0,chargeLevel);
+  gui.displaySensorData(0,0,chargeLevel,0.0,0.0);
   #else
-  gui.displaySensorData(0,0);
+  gui.displaySensorData(0,0,0.0,0.0);
   #endif
   hpmaSerial.end();
   statusOff(bit_sensor);
@@ -178,9 +178,9 @@ void sensorLoop(){
       if(pm25<1000&&pm10<1000){
         gui.displaySensorAvarage(apm25);  // it was calculated on bleLoop()
         #ifdef TTGO_TQ
-        gui.displaySensorData(pm25,pm10,chargeLevel);
+        gui.displaySensorData(pm25,pm10,chargeLevel,humi,temp);
         #else
-        gui.displaySensorData(pm25,pm10);
+        gui.displaySensorData(pm25,pm10,humi,temp);
         #endif
         gui.displayLiveIcon();
         saveDataForAverage(pm25,pm10);
@@ -279,7 +279,6 @@ void batteryloop() {
   if (Rdelay > 52)
   {
     chargeLevel = 0; // 0%
-    Serial.println("Charge level 0%");
     return;
   }
   delayMicroseconds(1600);
@@ -288,8 +287,7 @@ void batteryloop() {
     delayMicroseconds(100);
     if (digitalRead(IP5306_2) == HIGH)
     {
-      chargeLevel = 4; // 100%
-      Serial.println("Charge level 100%");
+      chargeLevel = 100; // 100%
       return;
     }
   }
@@ -298,8 +296,7 @@ void batteryloop() {
     delayMicroseconds(100);
     if (digitalRead(IP5306_3) == LOW)
     {
-      chargeLevel = 1; // 25%
-      Serial.println("Charge level 25%");
+      chargeLevel = 25; // 25%
       return;
     }
   }
@@ -309,15 +306,13 @@ void batteryloop() {
     delayMicroseconds(100);
     if (digitalRead(IP5306_3) == HIGH)
     {
-      chargeLevel = 3; // 75%
-      Serial.println("Charge level 75%");
+      chargeLevel = 75; // 75%
       return;
     }
   }
   if (digitalRead(IP5306_3) == LOW)
   {
-    chargeLevel = 2; // 50%
-    Serial.println("Charge level 50%");
+    chargeLevel = 50; // 50%
     return;
   }
 #endif
@@ -334,7 +329,11 @@ bool apiIsConfigured(){
 void apiInit(){
   if (wifiOn && apiIsConfigured()) {
     Serial.println("-->[API] Connecting..");
-    api.configure(cfg.dname.c_str(), cfg.deviceId); // stationId and deviceId, optional endpoint, host and port
+    // stationId and deviceId, optional endpoint, host and port
+    if(cfg.apiuri.equals("") && cfg.apisrv.equals(""))
+      api.configure(cfg.dname.c_str(), cfg.deviceId); 
+    else
+      api.configure(cfg.dname.c_str(), cfg.deviceId, cfg.apiuri.c_str(), cfg.apisrv.c_str(), cfg.apiprt); 
     api.authorize(cfg.apiusr.c_str(), cfg.apipss.c_str());
     // api.dev = true;
     cfg.isNewAPIConfig=false; // flag for config via BLE
@@ -463,7 +462,9 @@ class MyOTAHandlerCallbacks: public OTAHandlerCallbacks{
 };
 
 void otaLoop(){
+  timerAlarmDisable(timer);                         // disable interrupt
   if(wifiOn)ota.loop();
+  timerAlarmEnable(timer);                         // enable interrupt
 }
 
 void otaInit(){
@@ -487,7 +488,7 @@ void wifiConnect(const char* ssid, const char* pass) {
   int wifi_retry = 0;
   while (WiFi.status() != WL_CONNECTED && wifi_retry++ < WIFI_RETRY_CONNECTION) {
     Serial.print(".");
-    delay(250);
+    delay(500);           // increment this delay on possible reconnect issues
   }
   if(wifiCheck()){
     cfg.isNewWifi=false;  // flag for config via BLE
@@ -665,6 +666,18 @@ void suspendLoop() {
 *  M A I N
 ******************************************************************************/
 
+void IRAM_ATTR resetModule(){
+  Serial.println("\n-->[INFO] Watchdog reached, rebooting..");
+  ESP.restart();
+}
+
+void enableWatchdog(){
+  timer = timerBegin(0, 80, true);                 // timer 0, div 80
+  timerAttachInterrupt(timer, &resetModule, true); // setting callback
+  timerAlarmWrite(timer, 15000000, false);         // set time in us (15s)
+  timerAlarmEnable(timer);                         // enable interrupt
+}
+
 void setup() {
 #ifdef TTGO_TQ
   pinMode(IP5306_2, INPUT);
@@ -692,6 +705,7 @@ void setup() {
   pinMode(GPIO_SENSOR_ENABLE, OUTPUT);
   enableSensor();
   gui.welcomeAddMessage("==SETUP READY==");
+  enableWatchdog();  // enable timer for reboot in any loop blocker
   delay(500);
 }
 
@@ -703,9 +717,12 @@ void loop(){
   batteryloop();   // battery charge status 
   bleLoop();       // notify data to connected devices
   wifiLoop();      // check wifi and reconnect it
-  suspendLoop();   // check API publication and hibernate all
+  //suspendLoop();   // check API publication and hibernate all
+  apiLoop();       // CanAir.io API publication
+  influxDbLoop();  // influxDB publication
   statusLoop();    // update sensor status GUI
-  otaLoop();       // check OTA updated
-  gui.pageEnd();
+  otaLoop();       // check for firmware updates
+  gui.pageEnd();   // gui changes push
   delay(500);
+  timerWrite(timer, 0);  //reset timer (feed watchdog)
 }
